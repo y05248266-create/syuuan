@@ -1,0 +1,2085 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自分専用時間割ナビ (樽町専用版)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SheetJS (Excel解析・ダウンロード) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+       @media print {
+            @page { size: A4 portrait; margin: 2mm 3mm 2mm 1mm; }
+            html, body { height: 100% !important; background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; overflow: hidden !important; }
+            .no-print { display: none !important; }
+            .container-print { max-width: 100% !important; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; box-shadow: none !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
+            #weeklyViewContainer { height: 100% !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; padding: 0 !important; border: none !important; width: 100% !important; box-sizing: border-box !important; }
+            
+            .weekly-table { flex-grow: 0 !important; border-collapse: collapse !important; width: 100% !important; table-layout: fixed !important; }
+            .weekly-table th { height: 26px !important; font-size: 10px !important; font-weight: bold !important; background-color: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .weekly-table td { font-size: 10px !important; border: 1px solid #000 !important; vertical-align: top !important; padding: 0 !important; }
+            
+            .weekly-table td.period-cell { height: 62px !important; vertical-align: top !important; }
+            .weekly-table td.morning-cell { height: 32px !important; vertical-align: top !important; }
+            
+            .weekly-cell-content { justify-content: flex-start !important; text-align: left !important; padding: 2px 3px !important; }
+            .weekly-cell-class { border-right: 1px solid #000 !important; background-color: #f0f9ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+            .daily-task-cell { height: 100% !important; padding: 2px !important; vertical-align: top !important; }
+            .task-box { min-height: 50px !important; padding: 2px 4px !important; font-size: 9px !important; margin-bottom: 2px !important; }
+            .task-box-title { font-size: 9px !important; font-weight: bold !important; }
+            
+            .memo-table { margin-top: 4px !important; flex-grow: 1 !important; border-collapse: collapse !important; width: 100% !important; table-layout: fixed !important; }
+            .memo-table td { border: 1px solid #000 !important; }
+            .memo-table td.label-col { width: 85px !important; font-size: 10px !important; font-weight: bold !important; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .memo-table td.content-col { height: 50px !important; font-size: 10px !important; text-align: left !important; vertical-align: top !important; padding: 3px 5px !important; }
+            
+            [contenteditable="true"]:focus { outline: none !important; background-color: transparent !important; }
+            .task-checkbox-print { display: none !important; }
+        }
+
+        .weekly-table, .memo-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: white; color: black; }
+        .weekly-table th, .weekly-table td, .memo-table th, .memo-table td { border: 1px solid #000; text-align: center; vertical-align: top; font-size: 11px; position: relative; padding: 0; word-break: break-all; }
+        .weekly-table th { height: 26px; font-weight: bold; background-color: #f8fafc; vertical-align: middle; }
+        .weekly-table td.period-cell { height: 52px; transition: background-color 0.15s; position: relative; vertical-align: top; }
+        .weekly-table td.morning-cell { height: 30px; background-color: #fffdf5; vertical-align: top; }
+        
+        .weekly-cell-inner { display: flex; align-items: stretch; height: 100%; width: 100%; position: relative; }
+        .weekly-cell-class { width: 28px; min-width: 28px; border-right: 1px dashed #94a3b8; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: border; color: #1e40af; background-color: #eff6ff; outline: none; word-break: break-all; padding: 1px; line-height: 1.1; text-align: center; }
+        .weekly-cell-content { flex-grow: 1; padding: 2px 4px; text-align: left; display: flex; flex-direction: column; justify-content: flex-start; line-height: 1.25; outline: none; }
+
+        .daily-task-cell { text-align: left; padding: 2px; vertical-align: top; font-size: 10px; line-height: 1.2; background-color: #f8fafc; }
+        .task-box { border: 1px solid #cbd5e1; border-radius: 3px; padding: 3px 5px; background-color: #ffffff; font-size: 9.5px; min-height: 38px; margin-bottom: 3px; }
+        .task-box-title { font-weight: bold; font-size: 9.5px; padding-bottom: 1px; margin-bottom: 2px; border-bottom: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; }
+        
+        .memo-table { margin-top: 5px; }
+        .memo-table td.label-col { width: 85px; height: 38px; text-align: center; font-weight: bold; background-color: #f8fafc; font-size: 10px; vertical-align: middle; }
+        .memo-table td.content-col { text-align: left; padding: 3px 5px; height: 38px; vertical-align: top; font-size: 10px; }
+        [contenteditable="true"]:focus { outline: 2px solid #2563eb; background-color: #eff6ff; }
+
+        .matrix-table-container { overflow-x: auto; max-height: 520px; border: 1px solid #cbd5e1; border-radius: 8px; }
+        .matrix-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 12px; }
+        .matrix-table th, .matrix-table td { border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; padding: 4px 6px; text-align: center; white-space: nowrap; }
+        .matrix-table th { position: sticky; top: 0; background: #f1f5f9; z-index: 10; font-weight: bold; color: #1e293b; }
+        .matrix-table td.sticky-col, .matrix-table th.sticky-col { position: sticky; left: 0; background: #f8fafc; z-index: 11; font-weight: bold; border-right: 2px solid #94a3b8; }
+        .matrix-input { width: 160px; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px; font-size: 11px; background: transparent; }
+        .matrix-input:focus { border-color: #2563eb; background: #ffffff; outline: none; box-shadow: 0 0 0 2px rgba(37,99,235,0.2); }
+
+        .modal-backdrop { background-color: rgba(15, 23, 42, 0.6); }
+        .checkbox-label { display: inline-flex; align-items: center; background: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; border: 1px solid #cbd5e1; }
+        .checkbox-label:hover { background: #e2e8f0; }
+        .checkbox-label input { margin-right: 5px; }
+
+        .todo-item { display: flex; align-items: center; gap: 4px; margin-bottom: 1px; }
+        .todo-item.done span { text-decoration: line-through; color: #94a3b8; }
+
+        .info-badge { display: block; font-size: 9px; line-height: 1.15; padding: 1px 2px; border-radius: 2px; text-align: left; margin-bottom: 1px; word-break: break-all; }
+    </style>
+</head>
+<body class="h-full flex flex-col text-slate-800 dark:text-slate-100 dark:bg-slate-900 transition-colors duration-200">
+
+    <!-- Header -->
+    <header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shadow-sm no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-emerald-600 text-white p-2 rounded-lg font-bold text-xl flex items-center justify-center w-10 h-10 shadow">
+                    <i class="fa-solid fa-calendar-week"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight text-slate-900 dark:text-white">自分専用時間割ナビ <span class="text-xs font-normal text-emerald-600 border border-emerald-500 px-1.5 py-0.5 rounded ml-1 font-bold">樽町専用版</span></h1>
+                    <p class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold"><i class="fa-solid fa-shield-halved mr-1"></i>給食・清掃・職員連絡・朝学習・道徳ローテーション自動対応</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <button onclick="openInstructionModal()" title="使い方説明書" class="p-2 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 rounded-lg text-xs border border-emerald-300 dark:border-emerald-700 font-bold flex items-center">
+                    <i class="fa-solid fa-circle-question mr-1 text-sm"></i> 説明書
+                </button>
+                <button onclick="toggleDarkMode()" title="ダークモード切替" class="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-sm border border-slate-300 dark:border-slate-600">
+                    <i id="darkModeIcon" class="fa-solid fa-moon"></i>
+                </button>
+                <span id="saveStatus" class="hidden sm:inline-flex items-center text-xs text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
+                    <i class="fa-solid fa-cloud-arrow-up mr-1.5"></i> 保存済み
+                </span>
+                <button onclick="openClearModal()" title="選択データ消去" class="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg text-xs border border-rose-200 font-semibold">
+                    <i class="fa-solid fa-trash-can mr-1"></i> データ消去
+                </button>
+                <button onclick="exportData()" title="全設定バックアップ保存" class="p-2 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-xs border border-slate-300 dark:border-slate-600 font-semibold">
+                    <i class="fa-solid fa-download mr-1 text-emerald-600"></i> 保存
+                </button>
+                <button onclick="document.getElementById('importFile').click()" title="全設定復元" class="p-2 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-xs border border-slate-300 dark:border-slate-600 font-semibold">
+                    <i class="fa-solid fa-upload mr-1 text-blue-600"></i> 復元
+                </button>
+                <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Steps -->
+    <div class="bg-white dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 no-print">
+        <div class="max-w-6xl mx-auto px-4">
+            <nav class="flex justify-between sm:justify-center sm:space-x-8 py-3">
+                <button onclick="switchStep(1)" id="tab-step-1" class="step-tab flex items-center space-x-2 font-semibold text-emerald-600 border-b-2 border-emerald-600 pb-1">
+                    <span class="w-6 h-6 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center">1</span>
+                    <span class="text-xs sm:text-sm">① クラス・特別領域 ＆ 指導計画</span>
+                </button>
+                <button onclick="switchStep(2)" id="tab-step-2" class="step-tab flex items-center space-x-2 font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 pb-1">
+                    <span class="w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs flex items-center justify-center">2</span>
+                    <span class="text-xs sm:text-sm">② 通常時間割 (基本配置)</span>
+                </button>
+                <button onclick="switchStep(3)" id="tab-step-3" class="step-tab flex items-center space-x-2 font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 pb-1">
+                    <span class="w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs flex items-center justify-center">3</span>
+                    <span class="text-xs sm:text-sm">③ 行事表Excel読込＆解析</span>
+                </button>
+                <button onclick="switchStep(4)" id="tab-step-4" class="step-tab flex items-center space-x-2 font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 pb-1">
+                    <span class="w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs flex items-center justify-center">4</span>
+                    <span class="text-xs sm:text-sm">④ 週案表示・自由手動修正 (A4印刷)</span>
+                </button>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 container-print">
+
+        <!-- STEP 1: クラス設定 & 指導計画 -->
+        <section id="step-1" class="space-y-6">
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center">
+                        <i class="fa-solid fa-user-gear text-emerald-600 mr-2"></i> 教員プロフィール・担当クラス・道徳等設定
+                    </h2>
+                    <div class="flex gap-2">
+                        <button onclick="autoExtractClassesFromTimetable()" class="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-xs font-bold transition flex items-center">
+                            <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> 時間割から自動抽出
+                        </button>
+                        <button onclick="openClassModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow transition flex items-center">
+                            <i class="fa-solid fa-list-check mr-1.5"></i> クラス・道徳一括追加
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">お名前</label>
+                        <input type="text" id="teacherName" placeholder="鈴木 俊輔 先生" onchange="saveProfile()" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">担当学年（行事解析対象）</label>
+                        <select id="targetGrade" onchange="saveProfile()" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-bold text-emerald-700 dark:text-emerald-400 outline-none">
+                            <option value="1">1年生（上段）</option>
+                            <option value="2">2年生（中段）</option>
+                            <option value="3">3年生（下段）</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">担当教科</label>
+                        <input type="text" id="mainSubject" placeholder="教科名" onchange="saveProfile()" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">担当クラス・領域一覧（カンマ区切り）</label>
+                        <input type="text" id="classListStr" placeholder="1-1, 1-2, 道徳, 学活, 総合..." onchange="syncClassListFromStr()" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-bold text-blue-600 outline-none">
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                        <i class="fa-solid fa-tags text-blue-500 mr-1"></i> 設定中のクラス・特別領域:
+                    </label>
+                    <div id="classListBadges" class="flex flex-wrap gap-1.5"></div>
+                </div>
+            </div>
+
+            <!-- 指導計画ライブラリ -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 pb-3">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center">
+                            <i class="fa-solid fa-table-cells-large text-emerald-600 mr-2"></i> クラス・道徳・学活・総合 指導計画ライブラリ
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-0.5">セルをクリックしてExcelからCtrl+Vで貼り付け可能。道徳ローテーションや学活・総合の計画も列で管理できます。</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="loadSamplePlans()" class="px-3 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-sm transition flex items-center">
+                            <i class="fa-solid fa-lightbulb mr-1.5"></i> サンプル計画を反映
+                        </button>
+                        <button onclick="downloadMatrixTemplate()" class="px-3 py-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg shadow-sm transition flex items-center">
+                            <i class="fa-solid fa-file-excel mr-1.5"></i> Excel保存
+                        </button>
+                        <button onclick="document.getElementById('matrixExcelInput').click()" class="px-3 py-1.5 text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg border border-emerald-300 transition flex items-center">
+                            <i class="fa-solid fa-file-import mr-1.5"></i> Excel読込
+                        </button>
+                        <input type="file" id="matrixExcelInput" class="hidden" accept=".xlsx,.xls" onchange="importMatrixExcel(event)">
+                        <button onclick="openClearModal()" class="px-3 py-1.5 text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg border border-rose-200 transition flex items-center">
+                            <i class="fa-solid fa-trash-can mr-1"></i> リセット
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                    <div class="flex items-center space-x-2">
+                        <span class="font-bold text-slate-700 dark:text-slate-300"><i class="fa-solid fa-arrows-left-right mr-1"></i>全 <span id="classCountDisplay" class="text-blue-600 font-bold">0</span> 項目設定中</span>
+                        <button onclick="openClassModal()" class="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded">+ クラス・道徳を一括追加</button>
+                        <button onclick="addMaxRowsPrompt()" class="px-2.5 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 font-bold rounded text-slate-800 dark:text-slate-200 flex items-center">
+                            <i class="fa-solid fa-plus mr-1"></i> 時数コマ追加
+                        </button>
+                    </div>
+                    <span class="text-indigo-600 dark:text-indigo-400 font-bold"><i class="fa-solid fa-paste mr-1"></i>「授業名/やる事」の形式で入力可能</span>
+                </div>
+
+                <div class="matrix-table-container">
+                    <table class="matrix-table">
+                        <thead>
+                            <tr id="matrixHeaderTr">
+                                <th class="sticky-col" style="width: 70px;">時数/月</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matrixTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="switchStep(2)" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition flex items-center text-sm">
+                    次へ：通常時間割（クラス配置） <i class="fa-solid fa-arrow-right ml-2"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- STEP 2: 通常時間割 -->
+        <section id="step-2" class="space-y-6 hidden">
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center">
+                            <i class="fa-solid fa-table-cells text-emerald-600 mr-2"></i> 通常時間割（基本パターン）
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-0.5">担当クラス（「1-1」「2-1」等）や「道徳」「学活」「総合」を入力してください。</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="openClearModal()" class="px-3 py-1.5 text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg border border-rose-200 transition">
+                            <i class="fa-solid fa-trash-can mr-1"></i> リセット
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-sm">
+                        <thead>
+                            <tr id="timetableHeader" class="bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 text-center font-semibold">
+                                <th class="p-2 border border-slate-200 dark:border-slate-700 w-16">校時</th>
+                                <th class="p-2 border border-slate-200 dark:border-slate-700">月</th>
+                                <th class="p-2 border border-slate-200 dark:border-slate-700">火</th>
+                                <th class="p-2 border border-slate-200 dark:border-slate-700">水</th>
+                                <th class="p-2 border border-slate-200 dark:border-slate-700">木</th>
+                                <th class="p-2 border border-slate-200 dark:border-slate-700">金</th>
+                            </tr>
+                        </thead>
+                        <tbody id="normalTimetableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="flex justify-between">
+                <button onclick="switchStep(1)" class="px-5 py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-bold rounded-xl text-sm">
+                    <i class="fa-solid fa-arrow-left mr-2"></i> 前へ
+                </button>
+                <button onclick="switchStep(3)" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition flex items-center text-sm">
+                    次へ：行事予定の読み込み <i class="fa-solid fa-arrow-right ml-2"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- STEP 3: Excel読込・月判定 -->
+        <section id="step-3" class="space-y-6 hidden">
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+                <div id="inputModeFile">
+                    <div id="dropzone" onclick="document.getElementById('fileInput').click()"
+                         class="border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-emerald-500 rounded-xl p-8 text-center cursor-pointer bg-slate-50/50 dark:bg-slate-900/30 transition">
+                        <div class="flex flex-col items-center justify-center space-y-3">
+                            <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl">
+                                <i class="fa-solid fa-file-excel"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">行事予定表（職員用Excel）をクリックまたはドラッグ＆ドロップ</p>
+                                <p class="text-xs text-emerald-600 font-bold mt-1">※複数の月のExcelを順次読み込むことで、日付や単元計画が繋がって反映されます</p>
+                            </div>
+                        </div>
+                        <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls" onchange="handleFileUpload(event)">
+                    </div>
+                </div>
+            </div>
+
+            <div id="parseProgress" class="hidden p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center text-emerald-800 font-bold text-sm">
+                <i class="fa-solid fa-spinner fa-spin mr-2"></i> Excel解析中...
+            </div>
+
+            <!-- 解析結果プレビュー -->
+            <div id="parsedPreviewCard" class="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-700 space-y-4 hidden">
+                <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center">
+                        <i class="fa-solid fa-list-check text-emerald-600 mr-2"></i> 行事予定 解析結果 (<span id="detectedMonthDisplay"></span> / <span id="currentGradeDisplay"></span>)
+                    </h3>
+                    <button onclick="generateMySchedule(); switchStep(4);" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow transition flex items-center">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i> 個人週案を自動合成して表示 <i class="fa-solid fa-arrow-right ml-1"></i>
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 font-semibold text-center">
+                                <th class="p-2 border">日付</th>
+                                <th class="p-2 border">曜</th>
+                                <th class="p-2 border">朝学習</th>
+                                <th class="p-2 border">1限</th>
+                                <th class="p-2 border">2限</th>
+                                <th class="p-2 border">3限</th>
+                                <th class="p-2 border">4限</th>
+                                <th class="p-2 border">5限</th>
+                                <th class="p-2 border">6限</th>
+                                <th class="p-2 border">給食・清掃・部活</th>
+                                <th class="p-2 border">行事</th>
+                                <th class="p-2 border">職員連絡</th>
+                            </tr>
+                        </thead>
+                        <tbody id="parsedPreviewTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 4: 週案表示 & 印刷 -->
+        <section id="step-4" class="space-y-6 hidden">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
+                <div class="flex items-center space-x-3">
+                    <button onclick="prevWeek()" class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg font-bold text-xs hover:bg-slate-100">
+                        <i class="fa-solid fa-chevron-left mr-1"></i> 前の週
+                    </button>
+                    <span id="currentWeekRangeDisplay" class="font-bold text-sm text-emerald-700 dark:text-emerald-400"></span>
+                    <button onclick="nextWeek()" class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg font-bold text-xs hover:bg-slate-100">
+                        次の週 <i class="fa-solid fa-chevron-right ml-1"></i>
+                    </button>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button onclick="window.print()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs shadow transition flex items-center">
+                        <i class="fa-solid fa-print mr-1.5"></i> A4印刷
+                    </button>
+                    <button onclick="exportToExcel()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow transition flex items-center">
+                        <i class="fa-solid fa-file-excel mr-1.5"></i> Excel出力
+                    </button>
+                </div>
+            </div>
+
+            <!-- 印刷用コンテナ -->
+            <div id="weeklyViewContainer" class="bg-white p-4 rounded-xl shadow border border-slate-200">
+                <div class="flex justify-between items-end mb-2 border-b-2 border-slate-800 pb-1">
+                    <div>
+                        <h2 id="weeklyTitle" contenteditable="true" onblur="saveWeeklyTitle(this.innerText)" class="text-base font-bold tracking-wider outline-none inline-block">時間割・週案</h2>
+                    </div>
+                    <div class="text-xs font-bold text-slate-700 text-right">
+                        <span>担当: <span id="displayTeacherTitle"></span></span>
+                        <span class="ml-3">担当クラス・領域: <span id="displayClassList" class="text-blue-700 font-bold"></span></span>
+                    </div>
+                </div>
+
+                <!-- 週案メインテーブル -->
+                <table class="weekly-table">
+                    <thead id="weeklyTableHeader"></thead>
+                    <tbody id="weeklyTableBody"></tbody>
+                </table>
+
+                <!-- 週案メモテーブル -->
+                <table class="memo-table">
+                    <tbody id="weeklyMemoBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 説明書モーダル -->
+    <div id="instructionModal" class="fixed inset-0 modal-backdrop hidden flex items-center justify-center z-50 p-4 no-print">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 border border-slate-200 dark:border-slate-700 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
+                <h3 class="font-bold text-base text-emerald-700 dark:text-emerald-400 flex items-center">
+                    <i class="fa-solid fa-book-open mr-2"></i> 自分専用時間割ナビ 取扱説明書
+                </h3>
+                <button onclick="closeInstructionModal()" class="text-slate-400 hover:text-slate-600 font-bold text-lg">&times;</button>
+            </div>
+
+            <div class="space-y-4 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                <div>
+                    <h4 class="font-bold text-sm text-slate-900 dark:text-white mb-1"><i class="fa-solid fa-1 mr-1 text-emerald-600"></i>① クラス・道徳設定 ＆ 指導計画</h4>
+                    <p>・担当クラスに加えて「道徳」「学活」「総合」も登録できます。<br>・「指導計画ライブラリ」に道徳ローテーションや各クラスの単元計画を登録しておくと週案に自動反映されます。</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-sm text-slate-900 dark:text-white mb-1"><i class="fa-solid fa-2 mr-1 text-emerald-600"></i>② 通常時間割（基本配置）</h4>
+                    <p>・基本の時間割パターンを入力します。「1-1」「道徳」「学活」などを設定してください。</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-sm text-slate-900 dark:text-white mb-1"><i class="fa-solid fa-3 mr-1 text-emerald-600"></i>③ 行事予定表Excelの読み込み ＆ 駒合体</h4>
+                    <p>・Excelを読み込んだ後、必要に応じて各コマのドロップダウンから「2時間連続」「6時間連続」等を選択できます。設定された連続コマは週案上で連動します。</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-sm text-slate-900 dark:text-white mb-1"><i class="fa-solid fa-4 mr-1 text-emerald-600"></i>④ 週案表示・自由手動修正</h4>
+                    <p>・週案上のテキスト（クラス名・単元名・やる事・時数など）はクリックしてその場で自由に手動修正・上書きが可能です。</p>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+                <button onclick="closeInstructionModal()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition">
+                    閉じる
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- データ削除選択モーダル -->
+    <div id="clearModal" class="fixed inset-0 modal-backdrop hidden flex items-center justify-center z-50 p-4 no-print">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 dark:border-slate-700">
+            <div class="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
+                <h3 class="font-bold text-base text-rose-600 dark:text-rose-400 flex items-center">
+                    <i class="fa-solid fa-trash-can mr-2"></i> データの削除・リセット
+                </h3>
+                <button onclick="closeClearModal()" class="text-slate-400 hover:text-slate-600 font-bold text-lg">&times;</button>
+            </div>
+
+            <p class="text-xs text-slate-600 dark:text-slate-300">削除したい項目にチェックを入れて「選択した項目を削除」を押してください。</p>
+
+            <div class="space-y-2 text-xs">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-700">
+                    <label class="font-bold cursor-pointer flex items-center gap-2">
+                        <input type="checkbox" id="selectAllClearCb" onchange="toggleSelectAllClear(this.checked)" class="rounded text-rose-600 focus:ring-rose-500" checked>
+                        <span class="text-slate-800 dark:text-slate-200">すべて選択 / 解除</span>
+                    </label>
+                </div>
+
+                <label class="flex items-center space-x-2 p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                    <input type="checkbox" class="clear-target-cb rounded text-rose-600 focus:ring-rose-500" value="matrixPlans" checked>
+                    <div><div class="font-bold text-slate-800 dark:text-slate-200">① 指導計画ライブラリ (マトリクス)</div></div>
+                </label>
+
+                <label class="flex items-center space-x-2 p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                    <input type="checkbox" class="clear-target-cb rounded text-rose-600 focus:ring-rose-500" value="normalTimetable" checked>
+                    <div><div class="font-bold text-slate-800 dark:text-slate-200">② 通常時間割 (基本配置)</div></div>
+                </label>
+
+                <label class="flex items-center space-x-2 p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                    <input type="checkbox" class="clear-target-cb rounded text-rose-600 focus:ring-rose-500" value="parsedData" checked>
+                    <div><div class="font-bold text-slate-800 dark:text-slate-200">③ 読込済み行事・手動修正・自動生成週案データ</div></div>
+                </label>
+
+                <label class="flex items-center space-x-2 p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                    <input type="checkbox" class="clear-target-cb rounded text-rose-600 focus:ring-rose-500" value="dailyTasks" checked>
+                    <div><div class="font-bold text-slate-800 dark:text-slate-200">④ やる事・タスクリスト</div></div>
+                </label>
+
+                <label class="flex items-center space-x-2 p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                    <input type="checkbox" class="clear-target-cb rounded text-rose-600 focus:ring-rose-500" value="weeklyNotes" checked>
+                    <div><div class="font-bold text-slate-800 dark:text-slate-200">⑤ 週案メモ欄</div></div>
+                </label>
+            </div>
+
+            <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
+                <button onclick="closeClearModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold rounded-lg text-xs transition">
+                    キャンセル
+                </button>
+                <button onclick="executeClearData()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs shadow transition flex items-center">
+                    <i class="fa-solid fa-trash-can mr-1.5"></i> 選択した項目を削除
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- クラス・領域一括選択モーダル -->
+    <div id="classModal" class="fixed inset-0 modal-backdrop hidden flex items-center justify-center z-50 p-4 no-print">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-bold text-base text-slate-900 dark:text-white"><i class="fa-solid fa-list-check text-blue-600 mr-2"></i>クラス・特別領域 一括設定</h3>
+                <button onclick="closeClassModal()" class="text-slate-400 hover:text-slate-600 font-bold">&times;</button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="font-bold block mb-1 text-emerald-700 dark:text-emerald-400">特別領域（道徳ローテーション・学活・総合）</label>
+                    <div class="flex flex-wrap gap-1.5" id="modalGroup-special"></div>
+                </div>
+                <div>
+                    <label class="font-bold block mb-1">1年生</label>
+                    <div class="flex flex-wrap gap-1.5" id="modalGroup-1"></div>
+                </div>
+                <div>
+                    <label class="font-bold block mb-1">2年生</label>
+                    <div class="flex flex-wrap gap-1.5" id="modalGroup-2"></div>
+                </div>
+                <div>
+                    <label class="font-bold block mb-1">3年生</label>
+                    <div class="flex flex-wrap gap-1.5" id="modalGroup-3"></div>
+                </div>
+                <div>
+                    <label class="font-bold block mb-1">その他</label>
+                    <div class="flex flex-wrap gap-1.5" id="modalGroup-other"></div>
+                </div>
+
+                <div class="border-t pt-3 flex items-center justify-between">
+                    <div class="flex gap-2">
+                        <input type="number" id="numBoxCount" value="23" min="1" max="50" class="w-16 px-2 py-1 border rounded text-center font-bold">
+                        <button onclick="generateClassesByNumber()" class="px-3 py-1 bg-slate-200 hover:bg-slate-300 rounded font-bold">個数指定生成</button>
+                    </div>
+                    <button onclick="applySelectedClasses()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow">決定する</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Core Logic -->
+    <script>
+        const daysList = ["月", "火", "水", "木", "金"];
+        const periodCount = 6;
+
+        let state = {
+            teacherName: '',
+            targetGrade: '1',
+            schoolName: '樽町中学校',
+            mainSubject: '',
+            classListStr: '1-1, 1-2, 1-3, 道徳, 学活, 総合',
+            classList: [],
+            classStartCounts: {}, 
+            maxMatrixRows: 40,
+            detectedMonth: 10,
+            detectedYear: 2026,
+            currentWeekIndex: 0,
+            darkMode: false,
+            weeklyTitle: '時間割・週案',
+            dailyTasks: {
+                daily: [{ text: '出席簿の確認', done: false }],
+                urgent: [],
+                thisWeek: [],
+                inCharge: [],
+                someday: []
+            },
+            normalTimetable: {},
+            matrixPlans: {}, 
+            unitPlans: [],
+            parsedMonthlyData: {},
+            generatedSchedule: {},
+            weeklyNotes: {},
+            manualCellOverrides: {}
+        };
+
+        function zenToHan(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+                .replace(/１/g, '1').replace(/２/g, '2').replace(/３/g, '3')
+                .replace(/４/g, '4').replace(/５/g, '5').replace(/６/g, '6');
+        }
+
+        function normalizeSubjectName(str) {
+            if (!str) return '';
+            return zenToHan(str).trim();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromLocalStorage();
+            syncClassListFromStr(false);
+            initClassModalCheckboxes();
+            applyDarkMode();
+            renderAllViews();
+        });
+
+        function openInstructionModal() {
+            const modal = document.getElementById('instructionModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeInstructionModal() {
+            const modal = document.getElementById('instructionModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem('teacher_schedule_app_tarumachi_v7', JSON.stringify(state));
+            const badge = document.getElementById('saveStatus');
+            if (badge) {
+                badge.classList.remove('hidden');
+                setTimeout(() => badge.classList.add('hidden'), 1500);
+            }
+        }
+
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem('teacher_schedule_app_tarumachi_v7') || 
+                          localStorage.getItem('teacher_schedule_app_tarumachi_v6') || 
+                          localStorage.getItem('teacher_schedule_app_tarumachi_v5');
+            if (saved) {
+                try {
+                    state = Object.assign(state, JSON.parse(saved));
+                    if (!state.classStartCounts) state.classStartCounts = {};
+                    if (!state.manualCellOverrides) state.manualCellOverrides = {};
+                    if (!state.dailyTasks) {
+                        state.dailyTasks = { daily: [], urgent: [], thisWeek: [], inCharge: [], someday: [] };
+                    }
+                } catch(e) { console.error("Failed to load local storage data", e); }
+            }
+        }
+
+        function toggleDarkMode() {
+            state.darkMode = !state.darkMode;
+            applyDarkMode();
+            saveToLocalStorage();
+        }
+
+        function applyDarkMode() {
+            const icon = document.getElementById('darkModeIcon');
+            if (state.darkMode) {
+                document.documentElement.classList.add('dark');
+                if (icon) icon.className = "fa-solid fa-sun text-amber-400";
+            } else {
+                document.documentElement.classList.remove('dark');
+                if (icon) icon.className = "fa-solid fa-moon";
+            }
+        }
+
+        function syncClassListFromStr(shouldSave = true) {
+            const raw = document.getElementById('classListStr')?.value || state.classListStr || '';
+            state.classListStr = raw;
+            state.classList = raw.split(/[,、\s]+/).map(s => s.trim()).filter(Boolean);
+            
+            if (shouldSave) {
+                saveToLocalStorage();
+                renderClassBadges();
+                renderMatrixTable();
+                generateMySchedule();
+            }
+        }
+
+        function removeClass(clsToRemove) {
+            if (!confirm(`項目「${clsToRemove}」を指導計画マトリクスから削除しますか？`)) return;
+
+            state.classList = state.classList.filter(c => c !== clsToRemove);
+            state.classListStr = state.classList.join(', ');
+            
+            if (document.getElementById('classListStr')) {
+                document.getElementById('classListStr').value = state.classListStr;
+            }
+
+            if (state.matrixPlans && state.matrixPlans[clsToRemove]) {
+                delete state.matrixPlans[clsToRemove];
+            }
+
+            syncMatrixToUnitPlans();
+            saveToLocalStorage();
+            renderClassBadges();
+            renderMatrixTable();
+            generateMySchedule();
+        }
+
+        function renderClassBadges() {
+            const container = document.getElementById('classListBadges');
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (!state.classList || state.classList.length === 0) {
+                container.innerHTML = `<span class="text-xs text-slate-400 italic">クラス・項目が登録されていません</span>`;
+                return;
+            }
+
+            state.classList.forEach(cls => {
+                const isSpecial = ["道徳", "学活", "総合", "1年道徳", "2年道徳", "3年道徳"].includes(cls);
+                const badge = document.createElement('span');
+                badge.className = `inline-flex items-center gap-1.5 px-2.5 py-1 ${isSpecial ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-slate-700 dark:text-blue-300'} border rounded-md text-xs font-bold`;
+                badge.innerHTML = `
+                    <span>${cls}</span>
+                    <button onclick="removeClass('${cls}')" title="${cls}を削除" class="hover:text-rose-600 transition text-slate-400 hover:font-black">
+                        &times;
+                    </button>
+                `;
+                container.appendChild(badge);
+            });
+        }
+
+        function autoExtractClassesFromTimetable() {
+            const extracted = new Set();
+            Object.values(state.normalTimetable).forEach(val => {
+                if (val && !["教科点検", "合唱", "部活", "文化祭", "文化発表会", "合唱リハ"].includes(val)) {
+                    extracted.add(val.trim());
+                }
+            });
+            if (extracted.size === 0) {
+                alert("通常時間割にクラスが入力されていません。ステップ②で時間割を設定してください。");
+                return;
+            }
+            const arr = Array.from(extracted).sort();
+            state.classList = arr;
+            state.classListStr = arr.join(', ');
+            document.getElementById('classListStr').value = state.classListStr;
+            saveToLocalStorage();
+            renderClassBadges();
+            renderMatrixTable();
+            generateMySchedule();
+            alert(`通常時間割から ${arr.length} 個の項目（${arr.join(', ')}）を自動抽出しました！`);
+        }
+
+        function renderAllViews() {
+            if (document.getElementById('teacherName')) document.getElementById('teacherName').value = state.teacherName || '';
+            if (document.getElementById('targetGrade')) document.getElementById('targetGrade').value = state.targetGrade || '1';
+            if (document.getElementById('mainSubject')) document.getElementById('mainSubject').value = state.mainSubject || '';
+            if (document.getElementById('classListStr')) document.getElementById('classListStr').value = state.classListStr || '';
+
+            renderClassBadges();
+            renderMatrixTable();
+            renderNormalTimetableInputs();
+
+            const previewCard = document.getElementById('parsedPreviewCard');
+            if (Object.keys(state.parsedMonthlyData).length > 0) {
+                if (previewCard) previewCard.classList.remove('hidden');
+                renderParsedPreview();
+                generateMySchedule();
+            } else {
+                if (previewCard) previewCard.classList.add('hidden');
+            }
+
+            renderWeeklyView();
+        }
+
+        function switchStep(stepNum) {
+            [1, 2, 3, 4].forEach(num => {
+                const el = document.getElementById(`step-${num}`);
+                if (el) el.classList.add('hidden');
+                const tab = document.getElementById(`tab-step-${num}`);
+                if (tab) {
+                    tab.className = "step-tab flex items-center space-x-2 font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 pb-1";
+                    const badge = tab.querySelector('span');
+                    if (badge) badge.className = "w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs flex items-center justify-center";
+                }
+            });
+
+            const currentEl = document.getElementById(`step-${stepNum}`);
+            if (currentEl) currentEl.classList.remove('hidden');
+            const activeTab = document.getElementById(`tab-step-${stepNum}`);
+            if (activeTab) {
+                activeTab.className = "step-tab flex items-center space-x-2 font-semibold text-emerald-600 border-b-2 border-emerald-600 pb-1";
+                const activeBadge = activeTab.querySelector('span');
+                if (activeBadge) activeBadge.className = "w-6 h-6 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center";
+            }
+
+            if (stepNum === 4) {
+                generateMySchedule();
+                renderWeeklyView();
+            }
+        }
+
+        function saveProfile() {
+            state.teacherName = document.getElementById('teacherName').value;
+            const newGrade = document.getElementById('targetGrade').value;
+            const gradeChanged = (state.targetGrade !== newGrade);
+            state.targetGrade = newGrade;
+            state.mainSubject = document.getElementById('mainSubject').value;
+            saveToLocalStorage();
+
+            if (gradeChanged && Object.keys(state.parsedMonthlyData).length > 0) {
+                renderParsedPreview();
+                generateMySchedule();
+            }
+        }
+
+        function openClearModal() {
+            const modal = document.getElementById('clearModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeClearModal() {
+            const modal = document.getElementById('clearModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function toggleSelectAllClear(checked) {
+            const cbs = document.querySelectorAll('.clear-target-cb');
+            cbs.forEach(cb => cb.checked = checked);
+        }
+
+        function executeClearData() {
+            const cbs = document.querySelectorAll('.clear-target-cb:checked');
+            if (cbs.length === 0) {
+                alert("削除する項目が選択されていません。");
+                return;
+            }
+
+            if (!confirm("選択したデータを削除します。実行してもよろしいですか？")) return;
+
+            const targets = Array.from(cbs).map(cb => cb.value);
+
+            if (targets.includes('matrixPlans')) {
+                state.matrixPlans = {};
+                state.unitPlans = [];
+                state.classStartCounts = {};
+            }
+            if (targets.includes('normalTimetable')) {
+                state.normalTimetable = {};
+            }
+            if (targets.includes('parsedData')) {
+                state.parsedMonthlyData = {};
+                state.generatedSchedule = {};
+                state.manualCellOverrides = {};
+            }
+            if (targets.includes('dailyTasks')) {
+                state.dailyTasks = { daily: [], urgent: [], thisWeek: [], inCharge: [], someday: [] };
+            }
+            if (targets.includes('weeklyNotes')) {
+                state.weeklyNotes = {};
+            }
+
+            saveToLocalStorage();
+            renderAllViews();
+            closeClearModal();
+            alert("選択したデータを削除・リセットしました。");
+        }
+
+        function openClassModal() {
+            document.getElementById('classModal').classList.remove('hidden');
+            syncModalCheckboxes();
+        }
+
+        function closeClassModal() {
+            document.getElementById('classModal').classList.add('hidden');
+        }
+
+        function initClassModalCheckboxes() {
+            const createGroup = (id, items) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.innerHTML = '';
+                items.forEach(val => {
+                    el.appendChild(createModalCheckboxLabel(val));
+                });
+            };
+
+            const specialItems = ["道徳", "学活", "総合", "1年道徳", "2年道徳", "3年道徳"];
+            createGroup('modalGroup-special', specialItems);
+
+            const gen1 = Array.from({length: 15}, (_, i) => `1-${i+1}`);
+            const gen2 = Array.from({length: 15}, (_, i) => `2-${i+1}`);
+            const gen3 = Array.from({length: 15}, (_, i) => `3-${i+1}`);
+            
+            createGroup('modalGroup-1', gen1);
+            createGroup('modalGroup-2', gen2);
+            createGroup('modalGroup-3', gen3);
+
+            const otherItems = ["支援1", "支援2", "支援3", "支援4", "鍵当番"];
+            createGroup('modalGroup-other', otherItems);
+        }
+
+        function createModalCheckboxLabel(val) {
+            const label = document.createElement('label');
+            label.className = 'checkbox-label';
+            label.innerHTML = `<input type="checkbox" class="modal-cls-cb" value="${val}"> ${val}`;
+            return label;
+        }
+
+        function syncModalCheckboxes() {
+            const currentList = state.classList || [];
+            const checkboxes = document.querySelectorAll('.modal-cls-cb');
+            checkboxes.forEach(cb => {
+                cb.checked = currentList.includes(cb.value);
+            });
+        }
+
+        function generateClassesByNumber() {
+            const count = parseInt(document.getElementById('numBoxCount').value, 10) || 23;
+            const newClasses = ["道徳", "学活", "総合"];
+            for (let i = 1; i <= count; i++) {
+                if (i <= 15) {
+                    newClasses.push(`1-${i}`);
+                } else {
+                    const g = Math.floor((i - 1) / 15) + 1;
+                    const c = ((i - 1) % 15) + 1;
+                    newClasses.push(`${g}-${c}`);
+                }
+            }
+
+            state.classList = newClasses;
+            state.classListStr = newClasses.join(', ');
+            document.getElementById('classListStr').value = state.classListStr;
+
+            saveToLocalStorage();
+            renderClassBadges();
+            renderMatrixTable();
+            generateMySchedule();
+            closeClassModal();
+            alert(`${count}個のクラス枠および特別領域を作成しました！`);
+        }
+
+        function applySelectedClasses() {
+            const checkboxes = document.querySelectorAll('.modal-cls-cb:checked');
+            const selected = Array.from(checkboxes).map(cb => cb.value);
+
+            if (selected.length === 0) {
+                alert("選択された項目がありません。");
+                return;
+            }
+
+            state.classList = selected;
+            state.classListStr = selected.join(', ');
+            document.getElementById('classListStr').value = state.classListStr;
+
+            saveToLocalStorage();
+            renderClassBadges();
+            renderMatrixTable();
+            generateMySchedule();
+            closeClassModal();
+            alert(`${selected.length} 個のクラス・特別領域を一括設定しました！`);
+        }
+
+        function addMaxRowsPrompt() {
+            const input = prompt("追加したいコマ数（数字）を入力してください：", "10");
+            if (input === null) return;
+            const count = parseInt(input.trim(), 10);
+            if (!isNaN(count) && count > 0) {
+                state.maxMatrixRows = (state.maxMatrixRows || 40) + count;
+                saveToLocalStorage();
+                renderMatrixTable();
+            } else if (input.trim() !== "") {
+                alert("有効な数字を入力してください。");
+            }
+        }
+
+        function updateClassStartCount(cls, val) {
+            const num = parseInt(val, 10);
+            if (!state.classStartCounts) state.classStartCounts = {};
+            state.classStartCounts[cls] = !isNaN(num) ? num : 0;
+            saveToLocalStorage();
+            generateMySchedule();
+        }
+
+        function renderMatrixTable() {
+            const countDisp = document.getElementById('classCountDisplay');
+            if (countDisp) countDisp.innerText = state.classList.length;
+
+            const trHeader = document.getElementById('matrixHeaderTr');
+            if (!trHeader) return;
+            trHeader.innerHTML = `<th class="sticky-col" style="width: 70px;">時数/月</th>`;
+            
+            state.classList.forEach(cls => {
+                const th = document.createElement('th');
+                const isSpecial = ["道徳", "学活", "総合", "1年道徳", "2年道徳", "3年道徳"].includes(cls);
+                th.className = `${isSpecial ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'} font-bold px-2 py-1`;
+                const startCnt = state.classStartCounts?.[cls] || 0;
+                th.innerHTML = `
+                    <div class="flex flex-col items-center">
+                        <div class="flex items-center justify-between w-full gap-1">
+                            <span class="text-sm">${cls}</span>
+                            <button onclick="removeClass('${cls}')" title="${cls}を削除" class="text-rose-400 hover:text-rose-600 transition text-xs font-normal">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        <div class="text-[10px] font-normal text-slate-500 mt-0.5 no-print">
+                            開始時数: <input type="number" min="0" value="${startCnt}" onchange="updateClassStartCount('${cls}', this.value)" class="w-10 text-center border rounded bg-white text-slate-800 font-bold"> 時
+                        </div>
+                    </div>
+                `;
+                trHeader.appendChild(th);
+            });
+
+            const tbody = document.getElementById('matrixTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const rowCount = state.maxMatrixRows || 40;
+            for (let r = 0; r <= rowCount; r++) {
+                const tr = document.createElement('tr');
+                const isZeroRow = (r === 0);
+                const labelClass = isZeroRow 
+                    ? "sticky-col font-mono text-indigo-700 bg-indigo-50 dark:bg-slate-900 dark:text-indigo-400 font-bold" 
+                    : "sticky-col font-mono text-slate-500 bg-slate-100 dark:bg-slate-800";
+                
+                let rowHtml = `<td class="${labelClass}">第${r}項</td>`;
+
+                state.classList.forEach((cls, cIdx) => {
+                    const item = state.matrixPlans[cls]?.[r] || { name: '', task: '' };
+                    const displayVal = item.name + (item.task ? ` / ${item.task}` : '');
+                    const placeholderText = isZeroRow ? "コピペ(Ctrl+V)" : "単元・資料名 / やる事";
+                    const inputStyle = isZeroRow ? "background-color: rgba(224, 231, 255, 0.3);" : "";
+                    const safeVal = displayVal.replace(/"/g, '&quot;');
+
+                    rowHtml += `
+                        <td>
+                            <input type="text" value="${safeVal}" placeholder="${placeholderText}" style="${inputStyle}"
+                                   data-cls="${cls}" data-row="${r}" data-cidx="${cIdx}"
+                                   onpaste="handleCellPaste(event, '${cls}', ${r})"
+                                   onblur="updateMatrixCell('${cls}', ${r}, this.value)"
+                                   class="matrix-input">
+                        </td>
+                    `;
+                });
+
+                tr.innerHTML = rowHtml;
+                tbody.appendChild(tr);
+            }
+        }
+
+        function updateMatrixCell(cls, rowIdx, val) {
+            if (!state.matrixPlans[cls]) state.matrixPlans[cls] = {};
+            const parts = val.split(/[/／]/);
+            state.matrixPlans[cls][rowIdx] = {
+                name: parts[0] ? parts[0].trim() : '',
+                task: parts[1] ? parts[1].trim() : ''
+            };
+            syncMatrixToUnitPlans();
+            saveToLocalStorage();
+            generateMySchedule();
+        }
+
+        function handleCellPaste(e, startCls, startRow) {
+            let clipboardData = (e.clipboardData || window.clipboardData).getData('text');
+            if (!clipboardData) return;
+
+            e.preventDefault();
+
+            const startCIdx = state.classList.indexOf(startCls);
+            if (startCIdx === -1) return;
+
+            const lines = clipboardData.split(/\r\n|\n|\r/).filter(line => line !== '');
+            const baseRow = (!startRow || startRow < 1) ? 1 : startRow;
+
+            lines.forEach((line, rOffset) => {
+                const targetRow = baseRow + rOffset;
+                const cols = line.split('\t');
+
+                cols.forEach((cellVal, cOffset) => {
+                    const targetCIdx = startCIdx + cOffset;
+                    if (targetCIdx < state.classList.length) {
+                        const targetCls = state.classList[targetCIdx];
+                        if (!state.matrixPlans[targetCls]) state.matrixPlans[targetCls] = {};
+
+                        const trimmed = cellVal.trim();
+                        const parts = trimmed.split(/[/／]/);
+                        state.matrixPlans[targetCls][targetRow] = {
+                            name: parts[0] ? parts[0].trim() : '',
+                            task: parts[1] ? parts[1].trim() : ''
+                        };
+                    }
+                });
+            });
+
+            const maxPastedRow = baseRow + lines.length - 1;
+            if (maxPastedRow > (state.maxMatrixRows || 40)) {
+                state.maxMatrixRows = maxPastedRow;
+            }
+
+            syncMatrixToUnitPlans();
+            saveToLocalStorage();
+            renderMatrixTable();
+            generateMySchedule();
+        }
+
+        function loadSamplePlans() {
+            if (!confirm("現在の指導計画をサンプルデータで差し替えますか？")) return;
+
+            const sampleClasses = ["1-1", "1-2", "2-1", "道徳", "学活", "総合"];
+            const sampleData = {
+                "2-1": {
+                    21: { name: "授業の説明と情報復習", task: "基本操作確認" },
+                    22: { name: "情報モラル演習", task: "グループ発表" }
+                },
+                "道徳": {
+                    1: { name: "アイツの気持ち（ローテ担当1-1）", task: "ワークシート記入" },
+                    2: { name: "挨拶の意味（ローテ担当1-2）", task: "役割演技" }
+                }
+            };
+
+            state.classList = sampleClasses;
+            state.classListStr = sampleClasses.join(', ');
+            document.getElementById('classListStr').value = state.classListStr;
+            state.matrixPlans = sampleData;
+            state.classStartCounts = { "2-1": 20, "道徳": 0 };
+            state.maxMatrixRows = 40;
+
+            syncMatrixToUnitPlans();
+            saveToLocalStorage();
+            renderClassBadges();
+            renderMatrixTable();
+            generateMySchedule();
+            alert("サンプル指導計画ライブラリを反映しました！");
+        }
+
+        function syncMatrixToUnitPlans() {
+            state.unitPlans = [];
+            Object.keys(state.matrixPlans).forEach(cls => {
+                const rows = state.matrixPlans[cls];
+                Object.keys(rows).forEach(r => {
+                    const item = rows[r];
+                    if (item && (item.name || item.task)) {
+                        state.unitPlans.push({
+                            grade: cls.charAt(0) || state.targetGrade || '1',
+                            targetClass: cls,
+                            count: parseInt(r),
+                            name: item.name,
+                            task: item.task
+                        });
+                    }
+                });
+            });
+        }
+
+        function downloadMatrixTemplate() {
+            const rowCount = state.maxMatrixRows || 40;
+            const headers = ["時数/月", ...state.classList];
+            const data = [headers];
+
+            for (let r = 0; r <= rowCount; r++) {
+                const row = [`第${r}項`];
+                state.classList.forEach(cls => {
+                    const item = state.matrixPlans[cls]?.[r] || { name: '', task: '' };
+                    row.push(item.name + (item.task ? ` / ${item.task}` : ''));
+                });
+                data.push(row);
+            }
+
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "指導計画マトリクス");
+            XLSX.writeFile(wb, "指導計画_マトリクス.xlsx");
+        }
+
+        function importMatrixExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const wb = XLSX.read(data, { type: 'array' });
+                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+                    if (json.length <= 1) return;
+
+                    const headerRow = json[0];
+                    const importedClasses = [];
+                    for (let c = 1; c < headerRow.length; c++) {
+                        const className = String(headerRow[c] || '').trim();
+                        if (className) importedClasses.push(className);
+                    }
+
+                    if (importedClasses.length > 0) {
+                        state.classList = importedClasses;
+                        state.classListStr = importedClasses.join(', ');
+                        if (document.getElementById('classListStr')) {
+                            document.getElementById('classListStr').value = state.classListStr;
+                        }
+                    }
+
+                    state.matrixPlans = {};
+                    let maxRowIndex = 0;
+
+                    for (let r = 1; r < json.length; r++) {
+                        const row = json[r];
+                        if (!row || row.length === 0) continue;
+
+                        const firstColStr = String(row[0] || '').trim();
+                        let rowIdx = r - 1; 
+                        const numMatch = firstColStr.match(/\d+/);
+                        if (numMatch) {
+                            rowIdx = parseInt(numMatch[0], 10);
+                        }
+
+                        if (rowIdx > maxRowIndex) maxRowIndex = rowIdx;
+
+                        for (let c = 1; c < row.length; c++) {
+                            const cls = importedClasses[c - 1];
+                            const val = String(row[c] || '').trim();
+                            if (cls && val) {
+                                if (!state.matrixPlans[cls]) state.matrixPlans[cls] = {};
+                                const parts = val.split(/[/／]/);
+                                state.matrixPlans[cls][rowIdx] = {
+                                    name: parts[0] ? parts[0].trim() : '',
+                                    task: parts[1] ? parts[1].trim() : ''
+                                };
+                            }
+                        }
+                    }
+
+                    state.maxMatrixRows = Math.max(maxRowIndex, 40);
+                    syncMatrixToUnitPlans();
+                    saveToLocalStorage();
+                    renderClassBadges();
+                    renderMatrixTable();
+                    generateMySchedule();
+                    alert(`Excelから ${importedClasses.length} 項目分の指導計画を取り込みました！`);
+                } catch(err) {
+                    console.error(err);
+                    alert("マトリクスExcelの読み込みに失敗しました。");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        }
+
+        // STEP 2: 通常時間割
+        function renderNormalTimetableInputs() {
+            const headerTr = document.getElementById('timetableHeader');
+            if (!headerTr) return;
+            let headerHtml = `<th class="p-2 border border-slate-200 dark:border-slate-700 w-16">校時</th>`;
+            daysList.forEach(d => headerHtml += `<th class="p-2 border border-slate-200 dark:border-slate-700">${d}</th>`);
+            headerTr.innerHTML = headerHtml;
+
+            const tbody = document.getElementById('normalTimetableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            
+            for (let p = 1; p <= periodCount; p++) {
+                const tr = document.createElement('tr');
+                let html = `<td class="p-2 border bg-slate-50 dark:bg-slate-900 font-bold text-center text-xs">${p}限</td>`;
+                daysList.forEach(d => {
+                    const key = `${d}${p}`;
+                    const val = state.normalTimetable[key] || '';
+                    html += `
+                        <td class="p-1 border text-xs">
+                            <input type="text" placeholder="例: 1-1 / 道徳" value="${val}"
+                                   onchange="updateNormalTimetableCell('${key}', this.value)"
+                                   class="w-full px-2 py-1.5 text-center font-bold border rounded bg-white dark:bg-slate-800 outline-none focus:border-emerald-500 text-blue-700 dark:text-blue-400">
+                        </td>
+                    `;
+                });
+                tr.innerHTML = html;
+                tbody.appendChild(tr);
+            }
+        }
+
+        function updateNormalTimetableCell(key, val) {
+            state.normalTimetable[key] = val.trim();
+            saveToLocalStorage();
+            generateMySchedule();
+        }
+
+        // STEP 3: Excel読込 & 解析
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('parseProgress').classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const wb = XLSX.read(data, { type: 'array' });
+                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+                    processParsedJsonData(wb, json);
+                } catch(err) {
+                    alert("Excelファイルの解析でエラーが発生しました。");
+                    console.error(err);
+                    document.getElementById('parseProgress').classList.add('hidden');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function detectMonthAndYear(wb, json) {
+            let month = null;
+            let year = 2026;
+
+            if (wb && wb.SheetNames) {
+                for (const sheetName of wb.SheetNames) {
+                    const m = sheetName.match(/(\d{1,2})/);
+                    if (m) {
+                        const val = parseInt(m[1]);
+                        if (val >= 1 && val <= 12) { month = val; break; }
+                    }
+                }
+            }
+
+            for (let r = 0; r < Math.min(25, json.length); r++) {
+                const rowStr = json[r].map(c => zenToHan(String(c))).join(' ');
+                const yearMatch = rowStr.match(/(20\d{2})|令和\s*(\d{1,2})/);
+                if (yearMatch) {
+                    year = yearMatch[1] ? parseInt(yearMatch[1]) : 2018 + parseInt(yearMatch[2]);
+                }
+                const monthMatch = rowStr.match(/(\d{1,2})\s*月\s*行事/);
+                if (monthMatch) { month = parseInt(monthMatch[1]); break; }
+            }
+
+            if (!month) month = 10;
+            return { month, year };
+        }
+
+        function parseCellPeriodsStrict(rawPeriods) {
+            const periods = ["", "", "", "", "", ""];
+            for (let i = 0; i < 6; i++) {
+                let str = (rawPeriods[i] || '').trim();
+                if (/^[-\/××―ー―なし]+$/.test(str) || str.toLowerCase() === 'nan') {
+                    periods[i] = "";
+                } else {
+                    periods[i] = str;
+                }
+            }
+            return periods;
+        }
+
+        function cleanTextVal(val) {
+            if (!val) return '';
+            const str = String(val).trim();
+            if (str.toLowerCase() === 'nan' || str === 'undefined' || str === 'null') return '';
+            return str;
+        }
+
+        function processParsedJsonData(wb, json) {
+            if (!state.parsedMonthlyData) state.parsedMonthlyData = {};
+
+            const { month: detectedMonth, year: detectedYear } = detectMonthAndYear(wb, json);
+            state.detectedMonth = detectedMonth;
+            state.detectedYear = detectedYear;
+
+            let headerRowIdx = -1;
+            for (let r = 0; r < Math.min(25, json.length); r++) {
+                const rowStr = json[r].map(c => zenToHan(String(c))).join(' ');
+                if (rowStr.includes('日') && rowStr.includes('曜')) {
+                    headerRowIdx = r;
+                    break;
+                }
+            }
+
+            const targetGradeNum = parseInt(state.targetGrade || '1');
+            const gradeOffset = targetGradeNum - 1;
+            const startRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
+
+            for (let r = startRow; r < json.length; r++) {
+                const row = json[r];
+                if (!row || row.length === 0) continue;
+
+                let dayNum = null;
+                let dowVal = "";
+
+                const c1 = zenToHan(String(row[1] || '').trim());
+                const c2 = String(row[2] || '').trim();
+
+                if (/^\d{1,2}$/.test(c1)) {
+                    dayNum = parseInt(c1);
+                    dowVal = c2;
+                }
+
+                if (dayNum !== null && dayNum >= 1 && dayNum <= 31) {
+                    if (dowVal === "土" || dowVal === "日") continue;
+
+                    const dateStr = `${detectedYear}-${String(detectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                    const targetRowIdx = r + gradeOffset;
+                    const targetRow = (targetRowIdx < json.length) ? json[targetRowIdx] : row;
+
+                    const morningRaw = targetRow[3] !== undefined && targetRow[3] !== "" ? targetRow[3] : row[3];
+                    const morning = cleanTextVal(zenToHan(String(morningRaw || '').trim())).replace(/\n/g, ' ');
+
+                    const pCols = [4, 5, 6, targetGradeNum === 1 ? 7 : 8, 9, 10];
+                    const rawPeriods = pCols.map(colIdx => {
+                        const val = targetRow[colIdx] !== undefined && targetRow[colIdx] !== "" ? targetRow[colIdx] : row[colIdx];
+                        return zenToHan(String(val || '').trim());
+                    });
+
+                    const lunch = cleanTextVal(zenToHan(String(row[7] || row[8] || '').trim())).replace(/\n/g, ' ');
+                    const cleaning = cleanTextVal(row[11]);
+                    const club = cleanTextVal(zenToHan(String(row[12] || '').trim())).replace(/\n/g, ' ');
+                    const eventName = cleanTextVal(row[13]).replace(/\n/g, ' ');
+                    const staffNote = cleanTextVal(row[21]).replace(/\n/g, ' ');
+
+                    const periods = parseCellPeriodsStrict(rawPeriods);
+
+                    state.parsedMonthlyData[dateStr] = {
+                        dayOfWeek: dowVal || "月",
+                        morning: morning,
+                        periods: periods,
+                        spans: [1, 1, 1, 1, 1, 1],
+                        eventName: eventName,
+                        lunch: lunch,
+                        cleaning: cleaning,
+                        club: club,
+                        staffNote: staffNote
+                    };
+                }
+            }
+
+            document.getElementById('parseProgress').classList.add('hidden');
+            document.getElementById('parsedPreviewCard').classList.remove('hidden');
+            renderParsedPreview();
+            generateMySchedule();
+        }
+
+        function renderParsedPreview() {
+            const table = document.getElementById('parsedPreviewTable');
+            if (!table) return;
+            table.innerHTML = '';
+
+            document.getElementById('detectedMonthDisplay').innerText = `${state.detectedMonth}月`;
+            const gradeLabels = { '1': '1年生（上段）', '2': '2年生（中段）', '3': '3年生（下段）' };
+            document.getElementById('currentGradeDisplay').innerText = gradeLabels[state.targetGrade || '1'];
+
+            const sortedDates = Object.keys(state.parsedMonthlyData).sort();
+
+            sortedDates.forEach(dateStr => {
+                const data = state.parsedMonthlyData[dateStr];
+                const tr = document.createElement('tr');
+                const p = data.periods || ["", "", "", "", "", ""];
+                const spans = data.spans || [1, 1, 1, 1, 1, 1];
+
+                let html = `
+                    <td class="p-1 border-b font-mono font-semibold text-slate-700">${dateStr}</td>
+                    <td class="p-1 border-b font-bold text-center">${data.dayOfWeek}</td>
+                    <td class="p-1 border-b">
+                        <input type="text" value="${data.morning || ''}"
+                               onchange="updateParsedMorning('${dateStr}', this.value)"
+                               class="w-full text-center px-1 py-1 text-xs rounded border bg-amber-50/50 dark:bg-slate-900 font-bold text-amber-800">
+                    </td>
+                `;
+
+                for (let i = 0; i < 6; i++) {
+                    const spanVal = spans[i] || 1;
+                    html += `
+                        <td class="p-1 border-b">
+                            <div class="flex flex-col gap-1">
+                                <input type="text" value="${p[i] || ''}"
+                                       onchange="updateParsedCellPeriod('${dateStr}', ${i}, this.value)"
+                                       class="w-full text-center px-1 py-0.5 text-xs rounded border bg-white dark:bg-slate-900 font-bold ${p[i] ? 'text-emerald-700' : 'text-slate-300'}">
+                                <select onchange="updateParsedCellSpan('${dateStr}', ${i}, this.value)"
+                                        class="w-full text-[10px] p-0.5 border rounded bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold outline-none">
+                                    <option value="1" ${spanVal == 1 ? 'selected' : ''}>1コマ</option>
+                                    <option value="2" ${spanVal == 2 ? 'selected' : ''}>2時間連続</option>
+                                    <option value="3" ${spanVal == 3 ? 'selected' : ''}>3時間連続</option>
+                                    <option value="4" ${spanVal == 4 ? 'selected' : ''}>4時間連続</option>
+                                    <option value="5" ${spanVal == 5 ? 'selected' : ''}>5時間連続</option>
+                                    <option value="6" ${spanVal == 6 ? 'selected' : ''}>6時間連続</option>
+                                </select>
+                            </div>
+                        </td>
+                    `;
+                }
+
+                let daySummary = [];
+                if (data.lunch) daySummary.push(`給食:${data.lunch}`);
+                if (data.cleaning) daySummary.push(`清掃:${data.cleaning}`);
+                if (data.club) daySummary.push(`部活:${data.club}`);
+
+                html += `
+                    <td class="p-1 border-b text-[11px] text-slate-600">${daySummary.join(' / ')}</td>
+                    <td class="p-1 border-b font-bold text-amber-700">${data.eventName || ''}</td>
+                    <td class="p-1 border-b text-[11px] text-indigo-700">${data.staffNote || ''}</td>
+                `;
+
+                tr.innerHTML = html;
+                table.appendChild(tr);
+            });
+        }
+
+        function updateParsedMorning(dateStr, val) {
+            if (state.parsedMonthlyData[dateStr]) {
+                state.parsedMonthlyData[dateStr].morning = val.trim();
+                saveToLocalStorage();
+                generateMySchedule();
+            }
+        }
+
+        function updateParsedCellPeriod(dateStr, idx, val) {
+            if (state.parsedMonthlyData[dateStr]) {
+                state.parsedMonthlyData[dateStr].periods[idx] = val.trim();
+                saveToLocalStorage();
+                generateMySchedule();
+            }
+        }
+
+        function updateParsedCellSpan(dateStr, idx, val) {
+            if (state.parsedMonthlyData[dateStr]) {
+                if (!state.parsedMonthlyData[dateStr].spans) {
+                    state.parsedMonthlyData[dateStr].spans = [1, 1, 1, 1, 1, 1];
+                }
+                state.parsedMonthlyData[dateStr].spans[idx] = parseInt(val, 10) || 1;
+                saveToLocalStorage();
+                generateMySchedule();
+            }
+        }
+
+        function resolveClassAndInfo(periodVal, defaultDow, defaultPeriodNum, eventName = '', morning = '', staffNote = '') {
+            let raw = (periodVal || '').trim();
+            raw = zenToHan(raw);
+            raw = normalizeSubjectName(raw);
+
+            // 終日行事キーワード（「合唱」等の表記揺れもカバー）
+            const fullDayKeywords = [
+                "合唱祭", "合唱", "文化祭", "文化発表会", "体育祭", "校外学習", 
+                "修学旅行", "遠足", "球技大会", "定期テスト", "テスト", "卒業式", 
+                "入学式", "式典", "学年行事", "全校行事"
+            ];
+
+            // 行事名・朝学習・職員連絡・コマ内容のいずれかにキーワードが含まれているか判定
+            const checkText = `${eventName} ${morning} ${staffNote} ${raw}`;
+            const isFullDayEvent = fullDayKeywords.some(kw => checkText.includes(kw));
+
+            // ■ 終日行事の日の処理
+            if (isFullDayEvent) {
+                // コマに「1-1」など担当クラスが直接明記されている場合のみ授業として扱う
+                if (raw && state.classList.includes(raw)) {
+                    return { className: raw, specialLabel: '' };
+                }
+                // それ以外（コマが空欄、または「木1」「合唱」「-」等の場合）は通常時間割を適用せず授業なしにする
+                return { 
+                    className: '', 
+                    specialLabel: (raw && !/^[月火水木金土日]\d$/.test(raw)) ? raw : '' 
+                };
+            }
+
+            // ■ 通常日の処理（コマが空欄なら通常時間割を適用）
+            if (!raw) {
+                raw = state.normalTimetable[`${defaultDow}${defaultPeriodNum}`] || '';
+            }
+            if (!raw) return { className: '', specialLabel: '' };
+
+            if (state.classList.includes(raw)) {
+                return { className: raw, specialLabel: '' };
+            }
+
+            // 「木1」「火3」等の振替指定の解析
+            const dowMatch = raw.match(/^([月火水木金土日])(\d)$/);
+            if (dowMatch) {
+                const targetDow = dowMatch[1];
+                const targetP = dowMatch[2];
+                const mappedClass = state.normalTimetable[`${targetDow}${targetP}`] || '';
+                const normalizedMapped = normalizeSubjectName(mappedClass);
+                if (normalizedMapped && state.classList.includes(normalizedMapped)) {
+                    return { className: normalizedMapped, specialLabel: '' };
+                }
+                return { className: normalizedMapped || '', specialLabel: '' };
+            }
+
+            return { className: '', specialLabel: raw };
+        }
+
+        function getCalendarWeeks() {
+            const dates = Object.keys(state.parsedMonthlyData).sort();
+            if (dates.length === 0) return [];
+
+            let firstDateStr = dates[0];
+            let lastDateStr = dates[dates.length - 1];
+
+            let curr = new Date(firstDateStr);
+            let day = curr.getDay();
+            let diffToMon = (day === 0 ? -6 : 1 - day);
+            curr.setDate(curr.getDate() + diffToMon);
+
+            let endDate = new Date(lastDateStr);
+            let endDay = endDate.getDay();
+            let diffToFri = (endDay === 0 ? -2 : 5 - endDay);
+            endDate.setDate(endDate.getDate() + diffToFri);
+
+            const weeks = [];
+            while (curr <= endDate) {
+                const weekDays = [];
+                for (let i = 0; i < 5; i++) {
+                    const y = curr.getFullYear();
+                    const m = String(curr.getMonth() + 1).padStart(2, '0');
+                    const d = String(curr.getDate()).padStart(2, '0');
+                    weekDays.push(`${y}-${m}-${d}`);
+                    curr.setDate(curr.getDate() + 1);
+                }
+                weeks.push(weekDays);
+                curr.setDate(curr.getDate() + 2);
+            }
+            return weeks;
+        }
+
+        function generateMySchedule() {
+            state.generatedSchedule = {};
+            const classProgress = {};
+            
+            state.classList.forEach(c => {
+                const startVal = parseInt(state.classStartCounts?.[c], 10);
+                classProgress[c] = !isNaN(startVal) ? startVal : 0;
+            });
+
+            const calendarWeeks = getCalendarWeeks();
+            const allDatesInCalendar = calendarWeeks.flat();
+
+            allDatesInCalendar.forEach(dateStr => {
+                const dObj = new Date(dateStr);
+                const dowIndex = dObj.getDay(); 
+                const dow = daysList[dowIndex === 0 ? 6 : dowIndex - 1] || "月";
+
+                const hasParsedData = Boolean(state.parsedMonthlyData[dateStr]);
+                const dayData = state.parsedMonthlyData[dateStr] || {
+                    dayOfWeek: dow,
+                    morning: "",
+                    periods: ["", "", "", "", "", ""],
+                    spans: [1, 1, 1, 1, 1, 1],
+                    eventName: "",
+                    lunch: "",
+                    cleaning: "",
+                    club: "",
+                    staffNote: ""
+                };
+
+                state.generatedSchedule[dateStr] = {
+                    dayOfWeek: dow,
+                    morning: dayData.morning || '',
+                    eventName: dayData.eventName || '',
+                    lunch: dayData.lunch || '',
+                    cleaning: dayData.cleaning || '',
+                    club: dayData.club || '',
+                    staffNote: dayData.staffNote || '',
+                    hasParsedData: hasParsedData,
+                    periods: []
+                };
+
+                let activeCarry = null;
+
+                for (let pIdx = 0; pIdx < periodCount; pIdx++) {
+                    const pNum = pIdx + 1;
+                    
+                    if (!hasParsedData) {
+                        state.generatedSchedule[dateStr].periods.push({
+                            periodNum: pNum,
+                            className: '',
+                            specialLabel: '',
+                            unitPlan: null
+                        });
+                        continue;
+                    }
+
+                    let parsedPeriodVal = dayData.periods ? (dayData.periods[pIdx] || '') : '';
+                    let spanVal = (dayData.spans && dayData.spans[pIdx]) ? dayData.spans[pIdx] : 1;
+
+                    let className = '';
+                    let specialLabel = '';
+
+                    if (activeCarry && activeCarry.remainingSpan > 0 && !parsedPeriodVal) {
+                        className = activeCarry.className;
+                        specialLabel = activeCarry.specialLabel;
+                        activeCarry.remainingSpan--;
+                    } else {
+                        const resolved = resolveClassAndInfo(
+                            parsedPeriodVal, 
+                            dow, 
+                            pNum, 
+                            dayData.eventName || '', 
+                            dayData.morning || '', 
+                            dayData.staffNote || ''
+                        );
+                        className = resolved.className;
+                        specialLabel = resolved.specialLabel;
+
+                        if (spanVal > 1) {
+                            activeCarry = {
+                                className: className,
+                                specialLabel: specialLabel,
+                                remainingSpan: spanVal - 1
+                            };
+                        } else {
+                            activeCarry = null;
+                        }
+                    }
+
+                    let unitPlan = null;
+
+                    if (className && state.classList.includes(className)) {
+                        classProgress[className] = (classProgress[className] || 0) + 1;
+                        const currentCount = classProgress[className];
+
+                        const planMatch = state.matrixPlans[className]?.[currentCount];
+                        if (planMatch) {
+                            unitPlan = {
+                                count: currentCount,
+                                name: planMatch.name || '',
+                                task: planMatch.task || ''
+                            };
+                        } else {
+                            unitPlan = {
+                                count: currentCount,
+                                name: '',
+                                task: ''
+                            };
+                        }
+                    }
+
+                    state.generatedSchedule[dateStr].periods.push({
+                        periodNum: pNum,
+                        className: className,
+                        specialLabel: specialLabel,
+                        unitPlan: unitPlan
+                    });
+                }
+            });
+
+            saveToLocalStorage();
+            if (document.getElementById('step-4') && !document.getElementById('step-4').classList.contains('hidden')) {
+                renderWeeklyView();
+            }
+        }
+
+        // 週案表示描画（レイアウト位置を「左側:クラス名」「メイン:時数+単元+やる事」に改修）
+        function renderWeeklyView() {
+            const teacherTitle = document.getElementById('displayTeacherTitle');
+            if (teacherTitle) teacherTitle.innerText = state.teacherName || '先生';
+
+            const classListDisp = document.getElementById('displayClassList');
+            if (classListDisp) classListDisp.innerText = state.classListStr || '未設定';
+
+            const titleEl = document.getElementById('weeklyTitle');
+            if (titleEl) titleEl.innerText = state.weeklyTitle || '時間割・週案';
+
+            const calendarWeeks = getCalendarWeeks();
+            const totalWeeks = Math.max(1, calendarWeeks.length);
+
+            if (state.currentWeekIndex < 0) state.currentWeekIndex = 0;
+            if (state.currentWeekIndex >= totalWeeks) state.currentWeekIndex = Math.max(0, totalWeeks - 1);
+
+            const weekRangeDisp = document.getElementById('currentWeekRangeDisplay');
+            const weekDates = calendarWeeks[state.currentWeekIndex] || [];
+
+            if (weekRangeDisp) {
+                if (weekDates.length > 0) {
+                    const d1 = new Date(weekDates[0]);
+                    const d2 = new Date(weekDates[4]);
+                    weekRangeDisp.innerText = `${d1.getFullYear()}年 ${d1.getMonth()+1}/${d1.getDate()} (月) 〜 ${d2.getMonth()+1}/${d2.getDate()} (金) 【第${state.currentWeekIndex + 1}週 / 全${totalWeeks}週】`;
+                } else {
+                    weekRangeDisp.innerText = `行事予定未読み込み`;
+                }
+            }
+
+            const headerEl = document.getElementById('weeklyTableHeader');
+            if (!headerEl) return;
+            let headerHtml = `<tr><th style="width:6%;">校時</th>`;
+
+            if (weekDates.length > 0) {
+                weekDates.forEach((d, i) => {
+                    const daySched = state.generatedSchedule[d] || {};
+                    const dObj = new Date(d);
+                    const dateDisp = `${dObj.getMonth() + 1}/${dObj.getDate()}`;
+                    const dowStr = daysList[i];
+
+                    let infoBadges = '';
+                    if (!daySched.hasParsedData) {
+                        infoBadges += `<span class="info-badge bg-slate-100 text-slate-500 border border-slate-300">未読込日</span>`;
+                    } else {
+                        if (daySched.eventName) infoBadges += `<span class="info-badge bg-amber-100 text-amber-900 border border-amber-300 font-bold">行:${daySched.eventName}</span>`;
+                        if (daySched.lunch) infoBadges += `<span class="info-badge bg-emerald-50 text-emerald-800 border border-emerald-200">給:${daySched.lunch}</span>`;
+                        if (daySched.cleaning) infoBadges += `<span class="info-badge bg-blue-50 text-blue-800 border border-blue-200">清:${daySched.cleaning}</span>`;
+                        if (daySched.club) infoBadges += `<span class="info-badge bg-purple-50 text-purple-800 border border-purple-200">部:${daySched.club}</span>`;
+                        if (daySched.staffNote) infoBadges += `<span class="info-badge bg-indigo-100 text-indigo-900 border border-indigo-300 font-bold">連絡:${daySched.staffNote}</span>`;
+                    }
+
+                    headerHtml += `
+                        <th style="width:14.5%; padding: 3px 2px;">
+                            <div class="font-bold text-xs">${dateDisp} (${dowStr})</div>
+                            <div class="mt-1 space-y-0.5">${infoBadges}</div>
+                        </th>
+                    `;
+                });
+            } else {
+                daysList.forEach(d => {
+                    headerHtml += `<th style="width:14.5%;">${d}曜日</th>`;
+                });
+            }
+
+            headerHtml += `<th style="width:21.5%;">やる事・行事メモ</th></tr>`;
+            headerEl.innerHTML = headerHtml;
+
+            const bodyEl = document.getElementById('weeklyTableBody');
+            if (!bodyEl) return;
+            bodyEl.innerHTML = '';
+
+            // 朝学習行
+            const morningTr = document.createElement('tr');
+            let morningHtml = `<td class="font-bold bg-amber-50/80 text-amber-900 text-xs text-center align-middle">朝</td>`;
+            if (weekDates.length > 0) {
+                weekDates.forEach(d => {
+                    const daySched = state.generatedSchedule[d] || {};
+                    const cellOverrideKey = `${d}_P0`;
+                    const savedOverride = state.manualCellOverrides[cellOverrideKey];
+                    const morningVal = savedOverride?.name !== undefined ? savedOverride.name : (daySched.morning || '');
+
+                    morningHtml += `
+                        <td class="morning-cell px-1">
+                            <div class="font-bold text-slate-800 text-[10px] leading-tight outline-none"
+                                 contenteditable="true" onblur="saveCellOverride('${d}', 0, 'name', this.innerText)">${morningVal}</div>
+                        </td>
+                    `;
+                });
+            } else {
+                daysList.forEach(() => morningHtml += `<td class="morning-cell"></td>`);
+            }
+            morningHtml += `<td rowspan="${periodCount + 1}" class="daily-task-cell align-top">${renderTaskBoxHtml()}</td>`;
+            morningTr.innerHTML = morningHtml;
+            bodyEl.appendChild(morningTr);
+
+            // 1限〜6限の描画 (位置変更: 左側＝クラス名、右側＝時数＋単元＋やる事)
+            for (let p = 1; p <= periodCount; p++) {
+                const tr = document.createElement('tr');
+                let rowHtml = `<td class="font-bold bg-slate-50 text-center align-middle">${p}</td>`;
+
+                if (weekDates.length > 0) {
+                    weekDates.forEach(d => {
+                        const daySched = state.generatedSchedule[d];
+                        const cellOverrideKey = `${d}_P${p}`;
+                        const savedOverride = state.manualCellOverrides[cellOverrideKey];
+
+                        if (!daySched || !daySched.hasParsedData) {
+                            rowHtml += `<td class="period-cell">
+                                <div class="weekly-cell-inner">
+                                    <div class="weekly-cell-class" contenteditable="true" onblur="saveCellOverride('${d}', ${p}, 'cls', this.innerText)" title="クラス名">${savedOverride?.cls || ''}</div>
+                                    <div class="weekly-cell-content">
+                                        <div class="flex items-center gap-1">
+                                            <span class="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 rounded border border-slate-200 outline-none min-w-[12px] text-center" contenteditable="true" onblur="saveCellOverride('${d}', ${p}, 'count', this.innerText)" title="時数">${savedOverride?.count || ''}</span>
+                                            <span class="font-bold text-slate-800 text-[11px] leading-tight outline-none" contenteditable="true" onblur="saveCellOverride('${d}', ${p}, 'name', this.innerText)">${savedOverride?.name || ''}</span>
+                                        </div>
+                                        <div class="text-slate-500 text-[10px] leading-tight mt-0.5 outline-none" contenteditable="true" onblur="saveCellOverride('${d}', ${p}, 'task', this.innerText)">${savedOverride?.task || ''}</div>
+                                    </div>
+                                </div>
+                            </td>`;
+                            return;
+                        }
+
+                        const periodData = daySched.periods.find(item => item.periodNum === p);
+                        const cls = periodData?.className || '';
+                        const special = periodData?.specialLabel || '';
+                        const plan = periodData?.unitPlan;
+
+                        let displayCount = savedOverride?.count !== undefined ? savedOverride.count : (plan && plan.count ? plan.count : '');
+                        let displayClass = savedOverride?.cls !== undefined ? savedOverride.cls : (cls || (special ? special : ''));
+                        let displayName = savedOverride?.name !== undefined ? savedOverride.name : (plan && plan.name ? plan.name : (special && special !== displayClass ? special : ''));
+                        let displayTask = savedOverride?.task !== undefined ? savedOverride.task : (plan ? plan.task : '');
+
+                        rowHtml += `<td class="period-cell">
+                            <div class="weekly-cell-inner">
+                                <div class="weekly-cell-class" contenteditable="true" onblur="saveCellOverride('${d}', ${p}, 'cls', this.innerText)" title="クリックでクラス名を編集">${displayClass}</div>
+                                <div class="weekly-cell-content">
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 rounded border border-slate-200 outline-none min-w-[12px] text-center" contenteditable="true" onblur="saveCellOverride('${d}', ${p}, 'count', this.innerText)" title="時数">${displayCount}</span>
+                                        <span class="font-bold text-slate-800 text-[11px] leading-tight outline-none" contenteditable="true" onblur="saveCellOverride('${d}', ${p}, 'name', this.innerText)">${displayName}</span>
+                                    </div>
+                                    <div class="text-slate-500 text-[10px] leading-tight mt-0.5 outline-none" contenteditable="true" onblur="saveCellOverride('${d}', ${p}, 'task', this.innerText)">${displayTask}</div>
+                                </div>
+                            </div>
+                        </td>`;
+                    });
+                } else {
+                    daysList.forEach(d => {
+                        const cls = state.normalTimetable[`${d}${p}`] || '';
+                        rowHtml += `<td class="period-cell"><span class="font-bold text-blue-700 bg-blue-50 px-1 rounded">${cls}</span></td>`;
+                    });
+                }
+
+                tr.innerHTML = rowHtml;
+                bodyEl.appendChild(tr);
+            }
+
+            const memoBody = document.getElementById('weeklyMemoBody');
+            if (memoBody) {
+                const memoLabels = [
+                    { key: "月曜メモ", label: "月曜メモ" },
+                    { key: "火曜メモ", label: "火曜メモ" },
+                    { key: "水曜メモ", label: "水曜メモ" },
+                    { key: "木曜メモ", label: "木曜メモ" },
+                    { key: "金曜メモ", label: "金曜メモ" },
+                    { key: "週共通メモ", label: "週共通メモ" }
+                ];
+                let memoHtml = '';
+                memoLabels.forEach(m => {
+                    const val = state.weeklyNotes[m.key] || '';
+                    memoHtml += `
+                        <tr>
+                            <td class="label-col">${m.label}</td>
+                            <td class="content-col" contenteditable="true" onblur="saveWeeklyNote('${m.key}', this.innerText)">${val}</td>
+                        </tr>
+                    `;
+                });
+                memoBody.innerHTML = memoHtml;
+            }
+        }
+
+        function saveCellOverride(dateStr, periodNum, field, val) {
+            const key = `${dateStr}_P${periodNum}`;
+            if (!state.manualCellOverrides[key]) {
+                state.manualCellOverrides[key] = {};
+            }
+            state.manualCellOverrides[key][field] = val.trim();
+            saveToLocalStorage();
+        }
+
+        function prevWeek() {
+            if (state.currentWeekIndex > 0) {
+                state.currentWeekIndex--;
+                renderWeeklyView();
+            }
+        }
+
+        function nextWeek() {
+            const calendarWeeks = getCalendarWeeks();
+            if (state.currentWeekIndex < calendarWeeks.length - 1) {
+                state.currentWeekIndex++;
+                renderWeeklyView();
+            }
+        }
+
+        function saveWeeklyTitle(text) {
+            state.weeklyTitle = text;
+            saveToLocalStorage();
+        }
+
+        function saveWeeklyNote(key, text) {
+            state.weeklyNotes[key] = text;
+            saveToLocalStorage();
+        }
+
+        function renderTaskBoxHtml() {
+            const categories = [
+                { id: 'daily', title: '① 毎日やること' },
+                { id: 'urgent', title: '② 急ぎ・重要' },
+                { id: 'thisWeek', title: '③ 今週中にやること' },
+                { id: 'inCharge', title: '④ 校務分掌・担当' },
+                { id: 'someday', title: '⑤ 余裕のあるときにやること' }
+            ];
+
+            let html = `<div class="space-y-1 p-0.5">`;
+
+            categories.forEach(cat => {
+                const items = state.dailyTasks[cat.id] || [];
+                html += `
+                    <div class="task-box">
+                        <div class="task-box-title">
+                            <span>${cat.title}</span>
+                            <button onclick="addTodoPrompt('${cat.id}')" class="no-print text-blue-600 hover:text-blue-800 text-[10px] font-bold">+追加</button>
+                        </div>
+                        <div class="space-y-0.5 mt-0.5">
+                `;
+
+                items.forEach((item, idx) => {
+                    html += `
+                        <div class="todo-item ${item.done ? 'done' : ''}">
+                            <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleTodo('${cat.id}', ${idx})" class="task-checkbox-print cursor-pointer">
+                            <span class="flex-grow text-[10px] leading-tight">${item.text}</span>
+                            <button onclick="deleteTodo('${cat.id}', ${idx})" class="no-print text-slate-300 hover:text-rose-500 text-[10px]">&times;</button>
+                        </div>
+                    `;
+                });
+
+                html += `</div></div>`;
+            });
+
+            html += `</div>`;
+            return html;
+        }
+
+        function addTodoPrompt(catId) {
+            const text = prompt("追加するタスクを入力してください：");
+            if (text && text.trim()) {
+                if (!state.dailyTasks[catId]) state.dailyTasks[catId] = [];
+                state.dailyTasks[catId].push({ text: text.trim(), done: false });
+                saveToLocalStorage();
+                renderWeeklyView();
+            }
+        }
+
+        function toggleTodo(catId, idx) {
+            if (state.dailyTasks[catId] && state.dailyTasks[catId][idx]) {
+                state.dailyTasks[catId][idx].done = !state.dailyTasks[catId][idx].done;
+                saveToLocalStorage();
+                renderWeeklyView();
+            }
+        }
+
+        function deleteTodo(catId, idx) {
+            if (state.dailyTasks[catId]) {
+                state.dailyTasks[catId].splice(idx, 1);
+                saveToLocalStorage();
+                renderWeeklyView();
+            }
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `時間割ナビ設定バックアップ_${new Date().toISOString().slice(0,10)}.json`);
+            dlAnchorElem.click();
+        }
+
+        function importData(event) {
+            const fileReader = new FileReader();
+            fileReader.onload = function(e) {
+                try {
+                    state = JSON.parse(e.target.result);
+                    saveToLocalStorage();
+                    renderAllViews();
+                    alert("設定データを正常に復元しました！");
+                } catch(err) {
+                    alert("ファイルの読み込みに失敗しました。");
+                }
+            };
+            fileReader.readAsText(event.target.files[0]);
+        }
+
+        // Excel出力機能（時数の出力を含めるよう修正）
+        function exportToExcel() {
+            const calendarWeeks = getCalendarWeeks();
+            if (calendarWeeks.length === 0) {
+                alert("行事データがありません。Step③で行事予定表Excelをアップロードしてください。");
+                return;
+            }
+
+            const weekDates = calendarWeeks[state.currentWeekIndex] || [];
+
+            const headers = ["校時", ...weekDates.map(d => `${d} (${state.generatedSchedule[d]?.dayOfWeek || ''})`), "メモ"];
+            const rows = [headers];
+
+            const mRow = ["朝"];
+            weekDates.forEach(d => {
+                const cellOverrideKey = `${d}_P0`;
+                const savedOverride = state.manualCellOverrides[cellOverrideKey];
+                mRow.push(savedOverride?.name || state.generatedSchedule[d]?.morning || "");
+            });
+            mRow.push("");
+            rows.push(mRow);
+
+            for (let p = 1; p <= periodCount; p++) {
+                const row = [`${p}限`];
+                weekDates.forEach(d => {
+                    const daySched = state.generatedSchedule[d];
+                    const cellOverrideKey = `${d}_P${p}`;
+                    const savedOverride = state.manualCellOverrides[cellOverrideKey];
+
+                    const periodData = daySched ? daySched.periods.find(item => item.periodNum === p) : null;
+                    if (periodData) {
+                        const cls = savedOverride?.cls !== undefined ? savedOverride.cls : periodData.className || '';
+                        const count = savedOverride?.count !== undefined ? savedOverride.count : (periodData.unitPlan?.count || '');
+                        const name = savedOverride?.name !== undefined ? savedOverride.name : (periodData.unitPlan?.name || periodData.specialLabel || '');
+                        const task = savedOverride?.task !== undefined ? savedOverride.task : (periodData.unitPlan?.task || '');
+                        
+                        let cellTxt = '';
+                        if (cls) cellTxt += `[${cls}] `;
+                        if (count) cellTxt += `(${count}時) `;
+                        cellTxt += name;
+                        if (task) cellTxt += ` / ${task}`;
+                        row.push(cellTxt);
+                    } else {
+                        row.push("");
+                    }
+                });
+                row.push("");
+                rows.push(row);
+            }
+
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "週案");
+            XLSX.writeFile(wb, `週案_第${state.currentWeekIndex + 1}週.xlsx`);
+        }
+    </script>
+</body>
+</html>
